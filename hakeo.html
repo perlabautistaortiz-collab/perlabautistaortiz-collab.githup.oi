@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Terminal de Acceso</title>
+    <style>
+        :root {
+            --neon-green: #0f3;
+            --bg-color: #050505;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg-color);
+            color: var(--neon-green);
+            font-family: 'Courier New', Courier, monospace;
+            overflow: hidden;
+            font-size: 16px;
+        }
+
+        /* Efecto de monitor de tubo viejo (CRT) */
+        #crt-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            background-size: 100% 4px, 3px 100%;
+            z-index: 100;
+            pointer-events: none;
+            opacity: 0.5;
+        }
+
+        #terminal-container {
+            padding: 20px;
+            width: 100%;
+            height: 100%;
+            box-sizing: border-box;
+            overflow-y: auto;
+            position: relative;
+            z-index: 10;
+            text-shadow: 0 0 5px rgba(0, 255, 0, 0.5);
+            padding-bottom: 100px; /* Espacio extra al final */
+        }
+
+        #start-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background-color: var(--bg-color);
+            z-index: 50;
+        }
+
+        .btn {
+            background-color: transparent;
+            color: var(--neon-green);
+            border: 2px solid var(--neon-green);
+            padding: 15px 30px;
+            font-size: 1.5rem;
+            font-family: 'Courier New', Courier, monospace;
+            cursor: pointer;
+            text-transform: uppercase;
+            transition: all 0.2s;
+        }
+
+        .btn:hover {
+            background-color: var(--neon-green);
+            color: var(--bg-color);
+        }
+
+        .line {
+            margin-bottom: 5px;
+            word-wrap: break-word;
+            line-height: 1.4;
+        }
+
+        .highlight-white {
+            color: white;
+            text-shadow: 0 0 5px white;
+        }
+
+        .alert-red {
+            color: #ff3333;
+            text-shadow: 0 0 10px red;
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-top: 20px;
+            margin-bottom: 20px;
+        }
+
+        .blinking {
+            animation: blink 0.8s step-end infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+
+        #joke-modal-container {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            z-index: 200;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #joke-modal {
+            background-color: #ffffff;
+            color: #333333;
+            border-radius: 15px;
+            padding: 40px 30px;
+            text-align: center;
+            max-width: 85%;
+            width: 400px;
+            box-shadow: 0 15px 30px rgba(0,0,0,0.5);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            text-shadow: none;
+            transform: scale(0.8);
+            animation: popIn 0.5s forwards cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        @keyframes popIn {
+            to { transform: scale(1); }
+        }
+
+        #joke-modal h2 {
+            margin-top: 0;
+            font-size: 1.8rem;
+            color: #2b6cb0;
+            margin-bottom: 15px;
+        }
+
+        #joke-modal p {
+            font-size: 1.2rem;
+            margin-bottom: 30px;
+            line-height: 1.5;
+        }
+
+        .btn-friendly {
+            background-color: #3182ce;
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            font-size: 1.1rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-family: inherit;
+            font-weight: bold;
+            transition: background-color 0.2s;
+        }
+
+        .btn-friendly:hover {
+            background-color: #2b6cb0;
+        }
+    </style>
+</head>
+<body>
+    <div id="crt-overlay"></div>
+
+    <div id="start-screen">
+        <button id="start-btn" class="btn">INICIAR SISTEMA</button>
+    </div>
+
+    <div id="terminal-container">
+        <div id="output"></div>
+    </div>
+
+    <div id="joke-modal-container">
+        <div id="joke-modal">
+            <h2>¡Tranquilo! 😆</h2>
+            <p>¡No es cierto, Carlitos, nunca te haría eso! Es broma.</p>
+            <button id="close-modal-btn" class="btn-friendly">Cerrar</button>
+        </div>
+    </div>
+
+    <script>
+        const startBtn = document.getElementById('start-btn');
+        const startScreen = document.getElementById('start-screen');
+        const output = document.getElementById('output');
+        const terminalContainer = document.getElementById('terminal-container');
+        const jokeModalContainer = document.getElementById('joke-modal-container');
+        const closeModalBtn = document.getElementById('close-modal-btn');
+
+        // Función auxiliar para pausas (promesas)
+        const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+        // Forzar scroll hacia abajo
+        function scrollToBottom() {
+            terminalContainer.scrollTop = terminalContainer.scrollHeight;
+        }
+
+        // Imprimir una línea de texto en la terminal
+        function printLine(text, className = '') {
+            const line = document.createElement('div');
+            line.className = `line ${className}`;
+            line.innerHTML = text;
+            output.appendChild(line);
+            scrollToBottom();
+            return line;
+        }
+
+        function getRandomHackerText() {
+            const prefixes = ['[ROOT]', '[SYS]', '[NET]', '[BIN]', '[MEM]'];
+            const actions = ['Bypassing', 'Extracting', 'Injecting', 'Analyzing', 'Decrypting', 'Overriding'];
+            const targets = ['firewall', 'mainframe', 'packet', 'kernel', 'encryption key', 'node'];
+            
+            const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
+            const action = actions[Math.floor(Math.random() * actions.length)];
+            const target = targets[Math.floor(Math.random() * targets.length)];
+            
+            const ip = `${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}.${Math.floor(Math.random()*255)}`;
+            const hex = '0x' + Math.floor(Math.random()*16777215).toString(16).toUpperCase().padStart(6, '0');
+            
+            return `${prefix} ${ip} - ${action} ${target} at memory ${hex}... OK`;
+        }
+
+        async function runHackingSequence() {
+            // 1. Ocultar pantalla de inicio
+            startScreen.style.display = 'none';
+
+            // 2. Mostrar texto rápido y aleatorio (Fase 1)
+            for (let i = 0; i < 35; i++) {
+                printLine(getRandomHackerText());
+                await sleep(Math.random() * 60 + 20); // Entre 20ms y 80ms
+            }
+
+            printLine("<br/>");
+            
+            // 3. Barra de progreso (Fase 2)
+            let progress = 0;
+            const progressLine = printLine("Accediendo a base de datos... [0%]");
+            
+            // Este ciclo está asegurado para terminar al llegar a 100
+            while (progress < 100) {
+                // Avanzar entre 5% y 15% cada vez
+                progress += Math.floor(Math.random() * 10) + 5; 
+                if (progress > 100) progress = 100;
+                
+                // Actualizar texto
+                let bar = '='.repeat(Math.floor(progress / 5)) + ' '.repeat(20 - Math.floor(progress / 5));
+                progressLine.innerHTML = `Accediendo a base de datos... [${bar}] ${progress}%`;
+                
+                await sleep(Math.random() * 200 + 100);
+            }
+
+            // 4. Detenerse y extraer datos (Fase 3)
+            await sleep(500); // Pequeña pausa dramática
+            printLine("<br/>");
+            
+            printLine("EXTRAYENDO DATOS PERSONALES...", "highlight-white");
+            await sleep(1000); // Pausa exacta de 1 segundo
+            
+            printLine("Nombre detectado: CARLOS REY", "highlight-white");
+            await sleep(1000); // Pausa exacta de 1 segundo
+            
+            printLine("<br/>");
+            printLine("&gt;&gt;&gt; SISTEMA COMPROMETIDO &lt;&lt;&lt;", "alert-red blinking");
+
+            // 5. Esperar exactamente 3 segundos para la broma (Fase 4)
+            await sleep(3000);
+            jokeModalContainer.style.display = 'flex'; // Mostrar la ventana amigable
+        }
+
+        startBtn.addEventListener('click', async () => {
+            // Intentar pantalla completa si es posible
+            try {
+                if (document.documentElement.requestFullscreen) {
+                    await document.documentElement.requestFullscreen();
+                }
+            } catch (e) {
+                console.log("Pantalla completa ignorada");
+            }
+            // Iniciar la secuencia de inmediato
+            runHackingSequence();
+        });
+
+        closeModalBtn.addEventListener('click', () => {
+            jokeModalContainer.style.display = 'none';
+            // Opcional: salir de pantalla completa al cerrar
+            if (document.fullscreenElement) {
+                document.exitFullscreen();
+            }
+        });
+    </script>
+</body>
+</html>
